@@ -2,7 +2,6 @@ package com.example.wifisignalpro
 
 import android.Manifest
 import android.content.pm.PackageManager
-import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.Bundle
 import android.widget.ProgressBar
@@ -12,8 +11,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
-import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.lifecycle.viewmodel.viewModelFactory
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
@@ -29,15 +26,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var progressBar: ProgressBar
 
     private lateinit var viewModel: SignalViewModel
-
-    // مصفوفة لتحديد اللون المناسب حسب قوة الإشارة
-    private val signalColors = listOf(
-        -50 to R.color.signal_excellent,  // ممتاز ≥ -50
-        -60 to R.color.signal_good,       // جيد ≥ -60
-        -70 to R.color.signal_fair,       // متوسط ≥ -70
-        -80 to R.color.signal_poor,       // ضعيف ≥ -80
-        Int.MIN_VALUE to R.color.signal_very_poor // سيء جداً < -80
-    )
 
     // طلب إذن الموقع
     private val requestPermissionLauncher = registerForActivityResult(
