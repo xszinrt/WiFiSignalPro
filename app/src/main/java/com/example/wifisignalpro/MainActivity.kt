@@ -1,23 +1,21 @@
 package com.example.wifisignalpro
 
 import android.Manifest
-import android.content.BroadcastReceiver
-import android.content.Context
-import android.content.Intent
-import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import kotlinx.coroutines.*
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.lifecycle.viewmodel.viewModelFactory
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.launch
 
 class MainActivity : AppCompatActivity() {
 
@@ -30,14 +28,26 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvLinkSpeed: TextView
     private lateinit var progressBar: ProgressBar
 
-    private var wifiManager: WifiManager? = null
-    private val mainHandler = Handler(Looper.getMainLooper())
-    private var isUpdating = false
-    private val scope = CoroutineScope(Dispatchers.Main)
+    private lateinit var viewModel: SignalViewModel
 
-    companion object {
-        private const val PERMISSION_REQUEST_CODE = 100
-        private const val UPDATE_INTERVAL_MS = 1000L // 1 second
+    // مصفوفة لتحديد اللون المناسب حسب قوة الإشارة
+    private val signalColors = listOf(
+        -50 to R.color.signal_excellent,  // ممتاز ≥ -50
+        -60 to R.color.signal_good,       // جيد ≥ -60
+        -70 to R.color.signal_fair,       // متوسط ≥ -70
+        -80 to R.color.signal_poor,       // ضعيف ≥ -80
+        Int.MIN_VALUE to R.color.signal_very_poor // سيء جداً < -80
+    )
+
+    // طلب إذن الموقع
+    private val requestPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            startMonitoring()
+        } else {
+            Toast.makeText(this, "Location permission is required to read WiFi signal", Toast.LENGTH_LONG).show()
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -45,11 +55,42 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
 
         initViews()
-        wifiManager = applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
         
-        checkPermissions()
+        // إنشاء ViewModel
+        viewModel = SignalViewModel(application)
+        
+        checkPermissionAndStart()
+        
+        // جمع البيانات من ViewModel وتحديث الواجهة
+        lifecycleScope.launch {
+            viewModel.rssi.collectLatest { rssi ->
+                updateSignalDisplay(rssi)
+            }
+        }
+        
+        lifecycleScope.launch {
+            viewModel.ssid.collectLatest { ssid ->
+                tvSSID.text = if (ssid.isNotEmpty()) ssid else "Not connected"
+            }
+        }
+        
+        lifecycleScope.launch {
+            viewModel.linkSpeed.collectLatest { speed ->
+                tvLinkSpeed.text = if (speed > 0) "$speed Mbps" else "--"
+            }
+        }
+        
+        lifecycleScope.launch {
+            viewModel.frequency.collectLatest { freq ->
+                tvFrequency.text = when {
+                    freq > 4900 -> "5 GHz ($freq MHz)"
+                    freq > 0 -> "2.4 GHz ($freq MHz)"
+                    else -> "--"
+                }
+            }
+        }
     }
-
+    
     private fun initViews() {
         tvSignalStrength = findViewById(R.id.tvSignalStrength)
         tvSignalPercent = findViewById(R.id.tvSignalPercent)
@@ -60,115 +101,57 @@ class MainActivity : AppCompatActivity() {
         tvLinkSpeed = findViewById(R.id.tvLinkSpeed)
         progressBar = findViewById(R.id.progressBar)
     }
-
-    private fun checkPermissions() {
+    
+    private fun checkPermissionAndStart() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             when {
                 ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION)
                         == PackageManager.PERMISSION_GRANTED -> {
-                    startUpdating()
+                    startMonitoring()
                 }
                 else -> {
-                    ActivityCompat.requestPermissions(
-                        this,
-                        arrayOf(Manifest.permission.ACCESS_FINE_LOCATION),
-                        PERMISSION_REQUEST_CODE
-                    )
+                    requestPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
                 }
             }
         } else {
-            startUpdating()
+            startMonitoring()
         }
     }
-
-    override fun onRequestPermissionsResult(
-        requestCode: Int,
-        permissions: Array<out String>,
-        grantResults: IntArray
-    ) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == PERMISSION_REQUEST_CODE) {
-            if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                startUpdating()
-            } else {
-                Toast.makeText(this, "Location permission required for WiFi signal", Toast.LENGTH_LONG).show()
-            }
-        }
+    
+    private fun startMonitoring() {
+        viewModel.startMonitoring()
     }
-
-    private fun startUpdating() {
-        if (isUpdating) return
-        isUpdating = true
+    
+    private fun updateSignalDisplay(rssi: Int) {
+        // حساب النسبة المئوية (dBm يتراوح بين -100 و -50)
+        val percentage = when {
+            rssi >= -50 -> 100
+            rssi <= -100 -> 0
+            else -> ((rssi + 100) * 100 / 50).coerceIn(0, 100)
+        }
         
-        scope.launch {
-            while (isUpdating && !isFinishing && !isDestroyed) {
-                updateSignalInfo()
-                delay(UPDATE_INTERVAL_MS)
-            }
+        // تحديد اللون والجودة
+        val (colorRes, quality) = when {
+            rssi >= -50 -> R.color.signal_excellent to "Excellent"
+            rssi >= -60 -> R.color.signal_good to "Good"
+            rssi >= -70 -> R.color.signal_fair to "Fair"
+            rssi >= -80 -> R.color.signal_poor to "Poor"
+            else -> R.color.signal_very_poor to "Very Poor"
         }
+        
+        val color = getColor(colorRes)
+        
+        tvSignalStrength.text = "$rssi dBm"
+        tvSignalStrength.setTextColor(color)
+        tvSignalPercent.text = "$percentage%"
+        tvSignalQuality.text = quality
+        tvSignalQuality.setTextColor(color)
+        progressBar.progress = percentage
+        progressBar.progressTintList = android.content.res.ColorStateList.valueOf(color)
     }
-
-    private fun updateSignalInfo() {
-        wifiManager?.let { wm ->
-            try {
-                val wifiInfo = wm.connectionInfo
-                val rssi = wifiInfo.rssi
-                
-                // حساب النسبة المئوية (dBm يتراوح بين -100 و -50 تقريباً)
-                val percentage = when {
-                    rssi >= -50 -> 100.0
-                    rssi <= -100 -> 0.0
-                    else -> ((rssi + 100) * 100.0 / 50.0).coerceIn(0.0, 100.0)
-                }
-                
-                val (qualityText, colorRes) = when {
-                    percentage >= 80 -> "Excellent" to R.color.signal_excellent
-                    percentage >= 60 -> "Good" to R.color.signal_good
-                    percentage >= 40 -> "Fair" to R.color.signal_fair
-                    percentage >= 20 -> "Poor" to R.color.signal_poor
-                    else -> "Very Poor" to R.color.signal_very_poor
-                }
-                
-                val color = getColor(colorRes)
-                
-                tvSignalStrength.text = "$rssi dBm"
-                tvSignalStrength.setTextColor(color)
-                tvSignalPercent.text = "${percentage.toInt()}%"
-                tvSignalQuality.text = qualityText
-                tvSignalQuality.setTextColor(color)
-                progressBar.progress = percentage.toInt()
-                progressBar.progressTintList = android.content.res.ColorStateList.valueOf(color)
-                
-                // SSID
-                var ssid = wifiInfo.ssid
-                if (ssid.startsWith("\"") && ssid.endsWith("\"")) {
-                    ssid = ssid.substring(1, ssid.length - 1)
-                }
-                tvSSID.text = if (ssid.isNotEmpty() && ssid != "<unknown ssid>") ssid else "Not connected"
-                
-                // BSSID
-                tvBSSID.text = wifiInfo.bssid ?: "---"
-                
-                // Frequency
-                val frequency = wifiInfo.frequency
-                tvFrequency.text = when {
-                    frequency > 4900 -> "5 GHz ($frequency MHz)"
-                    frequency > 0 -> "2.4 GHz ($frequency MHz)"
-                    else -> "Unknown"
-                }
-                
-                // Link Speed
-                tvLinkSpeed.text = "${wifiInfo.linkSpeed} Mbps"
-                
-            } catch (e: Exception) {
-                // خطأ في القراءة
-            }
-        }
-    }
-
+    
     override fun onDestroy() {
         super.onDestroy()
-        isUpdating = false
-        scope.cancel()
+        viewModel.stopMonitoring()
     }
 }

@@ -9,8 +9,6 @@
     <color name="signal_very_poor">#F44336</color>
     <color name="text_primary">#FFFFFF</color>
     <color name="text_secondary">#B0BEC5</color>
-    
-    <!-- ✅ إضافة الألوان الأساسية -->
     <color name="black">#000000</color>
     <color name="white">#FFFFFF</color>
 </resources>

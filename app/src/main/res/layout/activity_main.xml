@@ -33,44 +33,37 @@
             android:padding="32dp"
             android:gravity="center">
 
-            <!-- Signal Strength Value -->
             <TextView
                 android:id="@+id/tvSignalStrength"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="-65 dBm"
+                android:text="-- dBm"
                 android:textSize="48sp"
-                android:textColor="@color/signal_fair"
                 android:textStyle="bold"
                 android:fontFamily="monospace" />
 
-            <!-- Signal Percentage -->
             <TextView
                 android:id="@+id/tvSignalPercent"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="45%"
+                android:text="--%"
                 android:textSize="20sp"
                 android:textColor="@color/text_secondary"
                 android:layout_marginTop="8dp" />
 
-            <!-- Signal Quality Text -->
             <TextView
                 android:id="@+id/tvSignalQuality"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Fair"
+                android:text="--"
                 android:textSize="16sp"
-                android:textColor="@color/signal_fair"
                 android:layout_marginTop="8dp" />
 
-            <!-- Progress Bar -->
             <ProgressBar
                 android:id="@+id/progressBar"
                 style="?android:attr/progressBarStyleHorizontal"
                 android:layout_width="match_parent"
                 android:layout_height="12dp"
-                android:progressTint="@color/signal_fair"
                 android:max="100"
                 android:layout_marginTop="24dp" />
 
@@ -107,7 +100,7 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="Not connected"
+                    android:text="--"
                     android:textColor="@color/text_primary"
                     android:textSize="14sp" />
             </LinearLayout>
@@ -128,7 +121,7 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="---"
+                    android:text="--"
                     android:textColor="@color/text_primary"
                     android:textSize="14sp" />
             </LinearLayout>
@@ -149,7 +142,7 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="---"
+                    android:text="--"
                     android:textColor="@color/text_primary"
                     android:textSize="14sp" />
             </LinearLayout>
@@ -169,7 +162,7 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="---"
+                    android:text="--"
                     android:textColor="@color/text_primary"
                     android:textSize="14sp" />
             </LinearLayout>
