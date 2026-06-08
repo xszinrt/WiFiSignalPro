@@ -19,6 +19,10 @@ import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -26,11 +30,24 @@ public class MainActivity extends AppCompatActivity {
     private TextView tvSSID, tvBSSID, tvFrequency, tvLinkSpeed;
     private ProgressBar progressBar;
     private WifiManager wifiManager;
-    private Handler handler;
-    private Runnable updateRunnable;
+    private ScheduledExecutorService scheduler;
+    private Handler uiHandler;
+    private boolean isScanning = false;
     
     private static final int PERMISSION_REQUEST_CODE = 100;
-    private static final long UPDATE_INTERVAL = 500; // تحديث كل نصف ثانية
+    private static final long SCAN_INTERVAL_SECONDS = 2; // فحص كل 2 ثانية
+
+    // BroadcastReceiver لاستقبال نتائج الفحص
+    private final BroadcastReceiver scanResultsReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            if (WifiManager.SCAN_RESULTS_AVAILABLE_ACTION.equals(intent.getAction())) {
+                updateSignalInfo();
+                // جدولة الفحص التالي بعد الانتهاء من تحديث الواجهة
+                scheduleNextScan();
+            }
+        }
+    };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -47,7 +64,7 @@ public class MainActivity extends AppCompatActivity {
         progressBar = findViewById(R.id.progressBar);
         
         wifiManager = (WifiManager) getApplicationContext().getSystemService(Context.WIFI_SERVICE);
-        handler = new Handler(Looper.getMainLooper());
+        uiHandler = new Handler(Looper.getMainLooper());
         
         checkPermissions();
     }
@@ -60,10 +77,10 @@ public class MainActivity extends AppCompatActivity {
                     new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, 
                     PERMISSION_REQUEST_CODE);
             } else {
-                startLiveUpdates();
+                startActiveScanning();
             }
         } else {
-            startLiveUpdates();
+            startActiveScanning();
         }
     }
     
@@ -72,31 +89,48 @@ public class MainActivity extends AppCompatActivity {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         if (requestCode == PERMISSION_REQUEST_CODE) {
             if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                startLiveUpdates();
+                startActiveScanning();
             } else {
                 Toast.makeText(this, "Location permission is required for WiFi signal monitoring", Toast.LENGTH_LONG).show();
             }
         }
     }
     
-    private void startLiveUpdates() {
-        // تحديث فوري أول مرة
-        updateSignalInfo();
+    private void startActiveScanning() {
+        // تسجيل BroadcastReceiver لنتائج الفحص
+        IntentFilter filter = new IntentFilter();
+        filter.addAction(WifiManager.SCAN_RESULTS_AVAILABLE_ACTION);
+        registerReceiver(scanResultsReceiver, filter);
         
-        // بدء التحديث الدوري
-        updateRunnable = new Runnable() {
-            @Override
-            public void run() {
-                updateSignalInfo();
-                handler.postDelayed(this, UPDATE_INTERVAL);
+        // بدء الفحص الأول
+        performScan();
+    }
+    
+    private void performScan() {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) 
+                == PackageManager.PERMISSION_GRANTED) {
+            if (wifiManager != null && !isScanning) {
+                isScanning = true;
+                // طلب فحص Wi-Fi جديد
+                wifiManager.startScan();
             }
-        };
-        handler.post(updateRunnable);
+        }
+    }
+    
+    private void scheduleNextScan() {
+        isScanning = false;
+        // استخدام Handler للتأخير بين الفحوصات
+        uiHandler.postDelayed(() -> {
+            if (!isFinishing() && !isDestroyed()) {
+                performScan();
+            }
+        }, SCAN_INTERVAL_SECONDS * 1000);
     }
     
     private void updateSignalInfo() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) 
                 == PackageManager.PERMISSION_GRANTED) {
+            
             WifiInfo wifiInfo = wifiManager.getConnectionInfo();
             
             if (wifiInfo != null && wifiInfo.getNetworkId() != -1) {
@@ -167,8 +201,16 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        if (handler != null && updateRunnable != null) {
-            handler.removeCallbacks(updateRunnable);
+        try {
+            unregisterReceiver(scanResultsReceiver);
+        } catch (IllegalArgumentException e) {
+            // Receiver not registered
+        }
+        if (scheduler != null && !scheduler.isShutdown()) {
+            scheduler.shutdown();
+        }
+        if (uiHandler != null) {
+            uiHandler.removeCallbacksAndMessages(null);
         }
     }
 }
