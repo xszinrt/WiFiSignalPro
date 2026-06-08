@@ -10,6 +10,8 @@ import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -24,20 +26,11 @@ public class MainActivity extends AppCompatActivity {
     private TextView tvSSID, tvBSSID, tvFrequency, tvLinkSpeed;
     private ProgressBar progressBar;
     private WifiManager wifiManager;
+    private Handler handler;
+    private Runnable updateRunnable;
     
     private static final int PERMISSION_REQUEST_CODE = 100;
-
-    private final BroadcastReceiver wifiReceiver = new BroadcastReceiver() {
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            String action = intent.getAction();
-            if (WifiManager.RSSI_CHANGED_ACTION.equals(action) || 
-                WifiManager.WIFI_STATE_CHANGED_ACTION.equals(action) ||
-                WifiManager.NETWORK_STATE_CHANGED_ACTION.equals(action)) {
-                updateSignalInfo();
-            }
-        }
-    };
+    private static final long UPDATE_INTERVAL = 500; // تحديث كل نصف ثانية
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -54,6 +47,7 @@ public class MainActivity extends AppCompatActivity {
         progressBar = findViewById(R.id.progressBar);
         
         wifiManager = (WifiManager) getApplicationContext().getSystemService(Context.WIFI_SERVICE);
+        handler = new Handler(Looper.getMainLooper());
         
         checkPermissions();
     }
@@ -66,12 +60,10 @@ public class MainActivity extends AppCompatActivity {
                     new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, 
                     PERMISSION_REQUEST_CODE);
             } else {
-                registerWifiReceiver();
-                updateSignalInfo();
+                startLiveUpdates();
             }
         } else {
-            registerWifiReceiver();
-            updateSignalInfo();
+            startLiveUpdates();
         }
     }
     
@@ -80,20 +72,26 @@ public class MainActivity extends AppCompatActivity {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         if (requestCode == PERMISSION_REQUEST_CODE) {
             if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                registerWifiReceiver();
-                updateSignalInfo();
+                startLiveUpdates();
             } else {
                 Toast.makeText(this, "Location permission is required for WiFi signal monitoring", Toast.LENGTH_LONG).show();
             }
         }
     }
     
-    private void registerWifiReceiver() {
-        IntentFilter filter = new IntentFilter();
-        filter.addAction(WifiManager.RSSI_CHANGED_ACTION);
-        filter.addAction(WifiManager.WIFI_STATE_CHANGED_ACTION);
-        filter.addAction(WifiManager.NETWORK_STATE_CHANGED_ACTION);
-        registerReceiver(wifiReceiver, filter);
+    private void startLiveUpdates() {
+        // تحديث فوري أول مرة
+        updateSignalInfo();
+        
+        // بدء التحديث الدوري
+        updateRunnable = new Runnable() {
+            @Override
+            public void run() {
+                updateSignalInfo();
+                handler.postDelayed(this, UPDATE_INTERVAL);
+            }
+        };
+        handler.post(updateRunnable);
     }
     
     private void updateSignalInfo() {
@@ -104,7 +102,7 @@ public class MainActivity extends AppCompatActivity {
             if (wifiInfo != null && wifiInfo.getNetworkId() != -1) {
                 int rssi = wifiInfo.getRssi();
                 int level = WifiManager.calculateSignalLevel(rssi, 101);
-                double percentage = (level * 100.0) / 100.0;
+                double percentage = level;
                 
                 String qualityText;
                 int color;
@@ -138,14 +136,18 @@ public class MainActivity extends AppCompatActivity {
                 if (ssid != null && ssid.startsWith("\"") && ssid.endsWith("\"")) {
                     ssid = ssid.substring(1, ssid.length() - 1);
                 }
-                tvSSID.setText(ssid != null ? ssid : "Unknown");
+                tvSSID.setText(ssid != null && !ssid.isEmpty() ? ssid : "Unknown");
                 tvBSSID.setText(wifiInfo.getBSSID() != null ? wifiInfo.getBSSID() : "Unknown");
                 
                 int frequency = wifiInfo.getFrequency();
-                if (frequency > 4900) {
-                    tvFrequency.setText("5 GHz (" + frequency + " MHz)");
+                if (frequency > 0) {
+                    if (frequency > 4900) {
+                        tvFrequency.setText("5 GHz (" + frequency + " MHz)");
+                    } else {
+                        tvFrequency.setText("2.4 GHz (" + frequency + " MHz)");
+                    }
                 } else {
-                    tvFrequency.setText("2.4 GHz (" + frequency + " MHz)");
+                    tvFrequency.setText("Unknown");
                 }
                 
                 tvLinkSpeed.setText(wifiInfo.getLinkSpeed() + " Mbps");
@@ -165,10 +167,8 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        try {
-            unregisterReceiver(wifiReceiver);
-        } catch (IllegalArgumentException e) {
-            // Receiver not registered
+        if (handler != null && updateRunnable != null) {
+            handler.removeCallbacks(updateRunnable);
         }
     }
 }
