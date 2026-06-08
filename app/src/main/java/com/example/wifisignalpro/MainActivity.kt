@@ -17,7 +17,6 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import androidx.core.content.ContextCompat.getSystemService
 
 class MainActivity : AppCompatActivity() {
 
@@ -36,10 +35,9 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         private const val PERMISSION_REQUEST_CODE = 100
-        private const val SCAN_INTERVAL_MS = 2000L // 2 seconds
+        private const val SCAN_INTERVAL_MS = 2000L
     }
 
-    // BroadcastReceiver لنتائج الفحص
     private val scanResultsReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action == WifiManager.SCAN_RESULTS_AVAILABLE_ACTION) {
@@ -55,7 +53,6 @@ class MainActivity : AppCompatActivity() {
 
         initViews()
         wifiManager = applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
-
         checkPermissions()
     }
 
@@ -106,13 +103,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startActiveScanning() {
-        // تسجيل BroadcastReceiver
         val filter = IntentFilter().apply {
             addAction(WifiManager.SCAN_RESULTS_AVAILABLE_ACTION)
         }
         registerReceiver(scanResultsReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
-
-        // بدء الفحص الأول
         performScan()
         updateSignalInfo()
     }
@@ -124,7 +118,6 @@ class MainActivity : AppCompatActivity() {
                     isScanning = true
                     wm.startScan()
                 } catch (e: Exception) {
-                    // فشل الفحص
                     isScanning = false
                     scheduleNextScan()
                 }
@@ -165,17 +158,15 @@ class MainActivity : AppCompatActivity() {
                 progressBar.progress = percentage.toInt()
                 progressBar.progressTintList = android.content.res.ColorStateList.valueOf(getColor(color))
 
-                // SSID
+                // SSID (إزالة علامات الاقتباس)
                 var ssid = wifiInfo.ssid
                 if (ssid.startsWith("\"") && ssid.endsWith("\"")) {
-                    ssid = ssid.substring(1, ssid.length() - 1)
+                    ssid = ssid.substring(1, ssid.length - 1)  // ✅ length (بدون أقواس)
                 }
                 tvSSID.text = if (ssid.isNotEmpty()) ssid else "Unknown"
 
-                // BSSID
                 tvBSSID.text = wifiInfo.bssid ?: "Unknown"
 
-                // Frequency
                 val frequency = wifiInfo.frequency
                 tvFrequency.text = when {
                     frequency > 4900 -> "5 GHz ($frequency MHz)"
@@ -183,11 +174,9 @@ class MainActivity : AppCompatActivity() {
                     else -> "Unknown"
                 }
 
-                // Link Speed
                 tvLinkSpeed.text = "${wifiInfo.linkSpeed} Mbps"
 
             } catch (e: Exception) {
-                // خطأ في القراءة
                 setDisconnectedState()
             }
         } ?: setDisconnectedState()
