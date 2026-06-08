@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="bg_primary">#0A0E17</color>
+    <color name="bg_secondary">#1A1F2C</color>
+    <color name="signal_excellent">#00E676</color>
+    <color name="signal_good">#76FF03</color>
+    <color name="signal_fair">#FFEA00</color>
+    <color name="signal_poor">#FF9800</color>
+    <color name="signal_very_poor">#F44336</color>
+    <color name="text_primary">#FFFFFF</color>
+    <color name="text_secondary">#B0BEC5</color>
+</resources>
